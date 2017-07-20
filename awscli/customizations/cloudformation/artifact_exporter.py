@@ -88,7 +88,7 @@ def parse_s3_url(url,
 
 
 def upload_local_artifacts(resource_id, resource_dict, property_name,
-                           parent_dir, uploader):
+                           parent_dir, uploader, force_zip=False):
     """
     Upload local artifacts referenced by the property at given resource and
     return S3 URL of the uploaded object. It is the responsibility of callers
@@ -131,7 +131,7 @@ def upload_local_artifacts(resource_id, resource_dict, property_name,
     local_path = make_abs_path(parent_dir, local_path)
 
     # Or, pointing to a folder. Zip the folder and upload
-    if is_local_folder(local_path):
+    if is_local_folder(local_path) or force_zip:
         return zip_and_upload(local_path, uploader)
 
     # Path could be pointing to a file. Upload the file
@@ -176,6 +176,8 @@ def make_zip(filename, source_root):
     with open(zipfile_name, 'wb') as f:
         zip_file = zipfile.ZipFile(f, 'w', zipfile.ZIP_DEFLATED)
         with contextlib.closing(zip_file) as zf:
+            if os.path.isfile(source_root):
+                zf.write(source_root, os.path.basename(source_root))
             for root, dirs, files in os.walk(source_root):
                 for filename in files:
                     full_path = os.path.join(root, filename)
@@ -268,7 +270,8 @@ class ResourceWithS3UrlDict(Resource):
         artifact_s3_url = \
             upload_local_artifacts(resource_id, resource_dict,
                                    self.PROPERTY_NAME,
-                                   parent_dir, self.uploader)
+                                   parent_dir, self.uploader,
+                                   self.ALWAYS_ZIP)
 
         resource_dict[self.PROPERTY_NAME] = parse_s3_url(
                 artifact_s3_url,
@@ -292,6 +295,7 @@ class LambdaFunctionResource(ResourceWithS3UrlDict):
     BUCKET_NAME_PROPERTY = "S3Bucket"
     OBJECT_KEY_PROPERTY = "S3Key"
     VERSION_PROPERTY = "S3ObjectVersion"
+    ALWAYS_ZIP = True
 
 
 class ApiGatewayRestApiResource(ResourceWithS3UrlDict):
